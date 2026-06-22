@@ -143,5 +143,5 @@ const int   udpPort  = 5000;
 
 ## Author
 
-**Rahul Kumar Mishra**  
+**Avyaya S Yekkar**  
 GitHub: [@avyaya-s](https://github.com/avyaya-s)
