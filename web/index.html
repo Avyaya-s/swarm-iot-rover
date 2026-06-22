@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Swarm Bot Telemetry Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/eventemitter2@6.4.9/lib/eventemitter2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/roslib@1.3.0/build/roslib.min.js"></script>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col font-sans">
+
+<header class="bg-gray-900 border-b border-gray-800 p-4 flex justify-between items-center shadow-lg">
+    <h1 class="text-xl font-bold tracking-wider text-cyan-400">🚀 SWARM_BOT COMMAND CENTER</h1>
+    <div id="status" class="px-3 py-1 rounded-full text-xs font-semibold bg-red-950 text-red-400 border border-red-800">
+        DISCONNECTED
+    </div>
+</header>
+
+<main class="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-4 p-4">
+
+    <div class="lg:col-span-1 flex flex-col gap-4">
+
+        <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow-md">
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-3">Live Telemetry</h2>
+            <div class="space-y-3">
+                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
+                    <span class="text-xs text-gray-400">Heading (Yaw)</span>
+                    <span id="telemetry-yaw" class="font-mono text-cyan-400 font-bold">0.0°</span>
+                </div>
+                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
+                    <span class="text-xs text-gray-400">Odometry X</span>
+                    <span id="telemetry-x" class="font-mono text-gray-300">0.00 m</span>
+                </div>
+                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
+                    <span class="text-xs text-gray-400">Odometry Y</span>
+                    <span id="telemetry-y" class="font-mono text-gray-300">0.00 m</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow-md">
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-3">Sensor Distances</h2>
+            <div class="space-y-3">
+                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
+                    <span class="text-xs text-red-400">● Front</span>
+                    <span id="sensor-front" class="font-mono text-gray-300">--- cm</span>
+                </div>
+                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
+                    <span class="text-xs text-green-400">● Left</span>
+                    <span id="sensor-left" class="font-mono text-gray-300">--- cm</span>
+                </div>
+                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
+                    <span class="text-xs text-blue-400">● Right</span>
+                    <span id="sensor-right" class="font-mono text-gray-300">--- cm</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow-md">
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-3">Map Stats</h2>
+            <div class="space-y-3">
+                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
+                    <span class="text-xs text-gray-400">Map Updates</span>
+                    <span id="map-updates" class="font-mono text-cyan-400">0</span>
+                </div>
+                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
+                    <span class="text-xs text-gray-400">Cells Mapped</span>
+                    <span id="map-cells" class="font-mono text-cyan-400">0</span>
+                </div>
+                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
+                    <span class="text-xs text-gray-400">Path Points</span>
+                    <span id="path-points" class="font-mono text-cyan-400">0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow-md">
+            <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-3">System Actions</h2>
+            <button onclick="resetView()"
+                class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-2 px-4 rounded-lg transition text-sm mb-2">
+                Reset View
+            </button>
+            <button onclick="clearAll()"
+                class="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition text-sm">
+                Clear Map & Path
+            </button>
+        </div>
+    </div>
+
+    <div class="lg:col-span-3 bg-gray-900 border border-gray-800 rounded-xl relative shadow-inner overflow-hidden">
+        <div class="absolute top-3 left-3 z-10 bg-gray-950/80 border border-gray-800 px-3 py-1 rounded-md text-xs text-gray-300">
+            2D Occupancy Map &nbsp;|&nbsp;
+            <span style="color:#e2e8f0">■</span> wall &nbsp;
+            <span style="color:#1e3a5f">■</span> free &nbsp;
+            <span style="color:#22d3ee">─</span> path &nbsp;
+            <span style="color:#22d3ee">●</span> robot
+        </div>
+        <canvas id="mapCanvas" style="width:100%;height:100%;display:block;"></canvas>
+    </div>
+
+</main>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+window._robotX      = 0;
+window._robotY      = 0;
+window._robotYaw    = 0;
+window._lastMap     = null;
+window._pathHistory = [];
+let mapUpdateCount  = 0;
+const PATH_MIN_DIST = 0.05;
+
+// ── ROS connection ─────────────────────────────────────────────────────────
+const ros = new ROSLIB.Ros({ url: 'ws://localhost:9090' });
+const statusEl = document.getElementById('status');
+
+ros.on('connection', () => {
+    statusEl.innerText = 'CONNECTED';
+    statusEl.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-green-950 text-green-400 border border-green-800';
+    subscribeTopics();
+});
+ros.on('error', () => {
+    statusEl.innerText = 'ERROR';
+    statusEl.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-amber-950 text-amber-400 border border-amber-800';
+});
+ros.on('close', () => {
+    statusEl.innerText = 'DISCONNECTED';
+    statusEl.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-red-950 text-red-400 border border-red-800';
+});
+
+// ── Subscriptions ──────────────────────────────────────────────────────────
+function subscribeTopics() {
+
+    // /odom
+    new ROSLIB.Topic({ ros, name: '/odom', messageType: 'nav_msgs/msg/Odometry' })
+    .subscribe(msg => {
+        const x      = msg.pose.pose.position.x;
+        const y      = msg.pose.pose.position.y;
+        const qz     = msg.pose.pose.orientation.z;
+        const qw     = msg.pose.pose.orientation.w;
+        const yawRad = 2 * Math.atan2(qz, qw);
+
+        window._robotX   = x;
+        window._robotY   = y;
+        window._robotYaw = yawRad;
+
+        const path = window._pathHistory;
+        if (path.length === 0) {
+            path.push({ x, y });
+        } else {
+            const last = path[path.length - 1];
+            const dx = x - last.x;
+            const dy = y - last.y;
+            if (Math.sqrt(dx*dx + dy*dy) >= PATH_MIN_DIST) {
+                path.push({ x, y });
+                document.getElementById('path-points').innerText = path.length;
+            }
+        }
+
+        document.getElementById('telemetry-x').innerText = x.toFixed(2) + ' m';
+        document.getElementById('telemetry-y').innerText = y.toFixed(2) + ' m';
+        let yawDeg = yawRad * 180 / Math.PI;
+        if (yawDeg < 0) yawDeg += 360;
+        document.getElementById('telemetry-yaw').innerText = yawDeg.toFixed(1) + '°';
+
+        if (window._lastMap) drawMap(window._lastMap);
+    });
+
+    // /sensor/*
+    [
+        { topic: '/sensor/front', el: 'sensor-front' },
+        { topic: '/sensor/left',  el: 'sensor-left'  },
+        { topic: '/sensor/right', el: 'sensor-right' },
+    ].forEach(s => {
+        new ROSLIB.Topic({ ros, name: s.topic, messageType: 'sensor_msgs/msg/Range' })
+        .subscribe(msg => {
+            document.getElementById(s.el).innerText = (msg.range * 100).toFixed(0) + ' cm';
+        });
+    });
+
+    // /map — retry every 3s until first message received
+    function subscribeMap() {
+        const mapTopic = new ROSLIB.Topic({
+            ros, name: '/map', messageType: 'nav_msgs/msg/OccupancyGrid'
+        });
+        mapTopic.subscribe(msg => {
+            mapUpdateCount++;
+            document.getElementById('map-updates').innerText = mapUpdateCount;
+            const mapped = msg.data.filter(v => v !== -1).length;
+            document.getElementById('map-cells').innerText = mapped;
+            window._lastMap = msg;
+            drawMap(msg);
+        });
+        return mapTopic;
+    }
+
+    let mapTopic = subscribeMap();
+    const mapRetry = setInterval(() => {
+        if (window._lastMap) {
+            clearInterval(mapRetry);
+            return;
+        }
+        // Unsubscribe and resubscribe to force rosbridge to push data
+        mapTopic.unsubscribe();
+        mapTopic = subscribeMap();
+    }, 3000);
+}
+
+// ── 2D Map Renderer ────────────────────────────────────────────────────────
+function drawMap(msg) {
+    const canvas = document.getElementById('mapCanvas');
+    const ctx    = canvas.getContext('2d');
+
+    const displayW = canvas.clientWidth;
+    const displayH = canvas.clientHeight;
+    if (canvas.width !== displayW || canvas.height !== displayH) {
+        canvas.width  = displayW;
+        canvas.height = displayH;
+    }
+
+    const W   = msg.info.width;
+    const H   = msg.info.height;
+    const res = msg.info.resolution;
+    const ox  = msg.info.origin.position.x;
+    const oy  = msg.info.origin.position.y;
+
+    // Auto-fit bounding box
+    let minX = W, maxX = 0, minY = H, maxY = 0;
+    for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+            if (msg.data[y * W + x] !== -1) {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+        }
+    }
+
+    const allPoints = [{ x: window._robotX, y: window._robotY }, ...window._pathHistory];
+    allPoints.forEach(p => {
+        const cx = Math.floor((p.x - ox) / res);
+        const cy = Math.floor((p.y - oy) / res);
+        if (cx < minX) minX = cx;
+        if (cx > maxX) maxX = cx;
+        if (cy < minY) minY = cy;
+        if (cy > maxY) maxY = cy;
+    });
+
+    const PAD = 10;
+    minX = Math.max(0, minX - PAD);
+    minY = Math.max(0, minY - PAD);
+    maxX = Math.min(W - 1, maxX + PAD);
+    maxY = Math.min(H - 1, maxY + PAD);
+
+    const spanX   = maxX - minX + 1;
+    const spanY   = maxY - minY + 1;
+    const scale   = Math.min(displayW / spanX, displayH / spanY);
+    const offsetX = (displayW - spanX * scale) / 2;
+    const offsetY = (displayH - spanY * scale) / 2;
+
+    const toCanvas = (wx, wy) => ({
+        px: offsetX + (Math.floor((wx - ox) / res) - minX) * scale,
+        py: offsetY + (maxY - Math.floor((wy - oy) / res)) * scale
+    });
+
+    // Background
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, displayW, displayH);
+
+    // Occupancy cells
+    const cellPx = Math.max(1, Math.ceil(scale));
+    for (let y = minY; y <= maxY; y++) {
+        for (let x = minX; x <= maxX; x++) {
+            const val = msg.data[y * W + x];
+            if (val === -1) continue;
+            const px = offsetX + (x - minX) * scale;
+            const py = offsetY + (maxY - y) * scale;
+            ctx.fillStyle = val >= 50 ? '#e2e8f0' : '#1e3a5f';
+            ctx.fillRect(px, py, cellPx, cellPx);
+        }
+    }
+
+    // Path trail
+    const path = window._pathHistory;
+    if (path.length > 1) {
+        ctx.beginPath();
+        const start = toCanvas(path[0].x, path[0].y);
+        ctx.moveTo(start.px, start.py);
+        for (let i = 1; i < path.length; i++) {
+            const pt = toCanvas(path[i].x, path[i].y);
+            ctx.lineTo(pt.px, pt.py);
+        }
+        ctx.strokeStyle = '#22d3ee';
+        ctx.lineWidth   = 2;
+        ctx.lineJoin    = 'round';
+        ctx.lineCap     = 'round';
+        ctx.stroke();
+    }
+
+    // Robot dot
+    const robot = toCanvas(window._robotX, window._robotY);
+    const dotR  = Math.max(5, scale * 1.5);
+    ctx.beginPath();
+    ctx.arc(robot.px, robot.py, dotR, 0, Math.PI * 2);
+    ctx.fillStyle = '#22d3ee';
+    ctx.fill();
+
+    // Heading arrow
+    const arrowLen = dotR * 3;
+    ctx.beginPath();
+    ctx.moveTo(robot.px, robot.py);
+    ctx.lineTo(
+        robot.px + arrowLen * Math.cos(window._robotYaw),
+        robot.py - arrowLen * Math.sin(window._robotYaw)
+    );
+    ctx.strokeStyle = '#22d3ee';
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+}
+
+// ── Controls ───────────────────────────────────────────────────────────────
+function resetView() {
+    if (window._lastMap) drawMap(window._lastMap);
+}
+
+function clearAll() {
+    window._pathHistory = [];
+    window._lastMap     = null;
+    mapUpdateCount      = 0;
+    document.getElementById('map-updates').innerText = '0';
+    document.getElementById('map-cells').innerText   = '0';
+    document.getElementById('path-points').innerText = '0';
+    const canvas = document.getElementById('mapCanvas');
+    const ctx    = canvas.getContext('2d');
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+window.addEventListener('resize', () => {
+    if (window._lastMap) drawMap(window._lastMap);
+});
+</script>
+</body>
+</html>
