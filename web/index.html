@@ -3,102 +3,328 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Swarm Bot Telemetry Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <title>Rover Command Center</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/eventemitter2@6.4.9/lib/eventemitter2.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/roslib@1.3.0/build/roslib.min.js"></script>
-</head>
-<body class="bg-gray-950 text-gray-100 min-h-screen flex flex-col font-sans">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
-<header class="bg-gray-900 border-b border-gray-800 p-4 flex justify-between items-center shadow-lg">
-    <h1 class="text-xl font-bold tracking-wider text-cyan-400">🚀 SWARM_BOT COMMAND CENTER</h1>
-    <div id="status" class="px-3 py-1 rounded-full text-xs font-semibold bg-red-950 text-red-400 border border-red-800">
-        DISCONNECTED
-    </div>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f8f9fa;
+            color: #1a1a1a;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Header ── */
+        header {
+            background: #ffffff;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 0 2rem;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo {
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #1a1a1a;
+        }
+
+        .logo span {
+            color: #6b7280;
+            font-weight: 400;
+        }
+
+        #status {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            padding: 4px 10px;
+            border-radius: 4px;
+            border: 1px solid;
+        }
+
+        #status.disconnected {
+            color: #dc2626;
+            border-color: #fecaca;
+            background: #fef2f2;
+        }
+
+        #status.connected {
+            color: #16a34a;
+            border-color: #bbf7d0;
+            background: #f0fdf4;
+        }
+
+        #status.error {
+            color: #d97706;
+            border-color: #fde68a;
+            background: #fffbeb;
+        }
+
+        /* ── Main layout ── */
+        main {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 0;
+            height: calc(100vh - 56px);
+        }
+
+        /* ── Left panel ── */
+        aside {
+            background: #ffffff;
+            border-right: 1px solid #e5e7eb;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.25rem;
+            overflow-y: auto;
+        }
+
+        .section-label {
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: #9ca3af;
+            margin-bottom: 0.75rem;
+        }
+
+        .card {
+            background: #f8f9fa;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 1rem;
+        }
+
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .data-row:last-child { border-bottom: none; }
+
+        .data-label {
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .data-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 500;
+            color: #1a1a1a;
+        }
+
+        .data-value.yaw { color: #2563eb; }
+
+        .sensor-dot {
+            display: inline-block;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .dot-front { background: #ef4444; }
+        .dot-left  { background: #16a34a; }
+        .dot-right { background: #2563eb; }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.4rem 0;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .stat-row:last-child { border-bottom: none; }
+
+        .stat-label { font-size: 12px; color: #6b7280; }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            font-weight: 500;
+            color: #2563eb;
+        }
+
+        /* ── Buttons ── */
+        .btn {
+            width: 100%;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            border: 1px solid;
+            transition: all 0.15s;
+        }
+
+        .btn-primary {
+            background: #1a1a1a;
+            color: #ffffff;
+            border-color: #1a1a1a;
+            margin-bottom: 8px;
+        }
+
+        .btn-primary:hover { background: #374151; border-color: #374151; }
+
+        .btn-secondary {
+            background: #ffffff;
+            color: #374151;
+            border-color: #d1d5db;
+        }
+
+        .btn-secondary:hover { background: #f3f4f6; }
+
+        /* ── Map canvas ── */
+        .map-container {
+            background: #ffffff;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .map-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .map-title {
+            font-size: 12px;
+            font-weight: 500;
+            color: #6b7280;
+            letter-spacing: 0.05em;
+        }
+
+        .map-legend {
+            display: flex;
+            gap: 1rem;
+            font-size: 11px;
+            color: #9ca3af;
+            align-items: center;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .legend-wall  { width: 10px; height: 10px; background: #1a1a1a; border-radius: 2px; }
+        .legend-free  { width: 10px; height: 10px; background: #f0f4ff; border: 1px solid #e5e7eb; border-radius: 2px; }
+        .legend-path  { width: 16px; height: 2px; background: #2563eb; border-radius: 1px; }
+        .legend-robot { width: 8px; height: 8px; background: #ef4444; border-radius: 50%; }
+
+        canvas {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="logo">Rover <span>Command Center</span></div>
+    <div id="status" class="disconnected">DISCONNECTED</div>
 </header>
 
-<main class="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-4 p-4">
+<main>
+    <aside>
 
-    <div class="lg:col-span-1 flex flex-col gap-4">
-
-        <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow-md">
-            <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-3">Live Telemetry</h2>
-            <div class="space-y-3">
-                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
-                    <span class="text-xs text-gray-400">Heading (Yaw)</span>
-                    <span id="telemetry-yaw" class="font-mono text-cyan-400 font-bold">0.0°</span>
+        <div>
+            <div class="section-label">Live Telemetry</div>
+            <div class="card">
+                <div class="data-row">
+                    <span class="data-label">Heading (Yaw)</span>
+                    <span id="telemetry-yaw" class="data-value yaw">0.0°</span>
                 </div>
-                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
-                    <span class="text-xs text-gray-400">Odometry X</span>
-                    <span id="telemetry-x" class="font-mono text-gray-300">0.00 m</span>
+                <div class="data-row">
+                    <span class="data-label">Odometry X</span>
+                    <span id="telemetry-x" class="data-value">0.00 m</span>
                 </div>
-                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
-                    <span class="text-xs text-gray-400">Odometry Y</span>
-                    <span id="telemetry-y" class="font-mono text-gray-300">0.00 m</span>
+                <div class="data-row">
+                    <span class="data-label">Odometry Y</span>
+                    <span id="telemetry-y" class="data-value">0.00 m</span>
                 </div>
             </div>
         </div>
 
-        <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow-md">
-            <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-3">Sensor Distances</h2>
-            <div class="space-y-3">
-                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
-                    <span class="text-xs text-red-400">● Front</span>
-                    <span id="sensor-front" class="font-mono text-gray-300">--- cm</span>
+        <div>
+            <div class="section-label">Sensor Distances</div>
+            <div class="card">
+                <div class="data-row">
+                    <span class="data-label"><span class="sensor-dot dot-front"></span>Front</span>
+                    <span id="sensor-front" class="data-value">--- cm</span>
                 </div>
-                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
-                    <span class="text-xs text-green-400">● Left</span>
-                    <span id="sensor-left" class="font-mono text-gray-300">--- cm</span>
+                <div class="data-row">
+                    <span class="data-label"><span class="sensor-dot dot-left"></span>Left</span>
+                    <span id="sensor-left" class="data-value">--- cm</span>
                 </div>
-                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
-                    <span class="text-xs text-blue-400">● Right</span>
-                    <span id="sensor-right" class="font-mono text-gray-300">--- cm</span>
-                </div>
-            </div>
-        </div>
-
-        <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow-md">
-            <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-3">Map Stats</h2>
-            <div class="space-y-3">
-                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
-                    <span class="text-xs text-gray-400">Map Updates</span>
-                    <span id="map-updates" class="font-mono text-cyan-400">0</span>
-                </div>
-                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
-                    <span class="text-xs text-gray-400">Cells Mapped</span>
-                    <span id="map-cells" class="font-mono text-cyan-400">0</span>
-                </div>
-                <div class="flex justify-between items-center bg-gray-950 p-2 rounded-lg">
-                    <span class="text-xs text-gray-400">Path Points</span>
-                    <span id="path-points" class="font-mono text-cyan-400">0</span>
+                <div class="data-row">
+                    <span class="data-label"><span class="sensor-dot dot-right"></span>Right</span>
+                    <span id="sensor-right" class="data-value">--- cm</span>
                 </div>
             </div>
         </div>
 
-        <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow-md">
-            <h2 class="text-sm font-semibold uppercase tracking-wider text-gray-400 mb-3">System Actions</h2>
-            <button onclick="resetView()"
-                class="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-2 px-4 rounded-lg transition text-sm mb-2">
-                Reset View
-            </button>
-            <button onclick="clearAll()"
-                class="w-full bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg transition text-sm">
-                Clear Map & Path
-            </button>
+        <div>
+            <div class="section-label">Map Stats</div>
+            <div class="card">
+                <div class="stat-row">
+                    <span class="stat-label">Map Updates</span>
+                    <span id="map-updates" class="stat-value">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Cells Mapped</span>
+                    <span id="map-cells" class="stat-value">0</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Path Points</span>
+                    <span id="path-points" class="stat-value">0</span>
+                </div>
+            </div>
         </div>
+
+        <div>
+            <div class="section-label">Controls</div>
+            <button class="btn btn-primary" onclick="resetView()">Reset View</button>
+            <button class="btn btn-secondary" onclick="clearAll()">Clear Map & Path</button>
+        </div>
+
+    </aside>
+
+    <div class="map-container">
+        <div class="map-header">
+            <span class="map-title">2D OCCUPANCY MAP</span>
+            <div class="map-legend">
+                <div class="legend-item"><div class="legend-wall"></div> Wall</div>
+                <div class="legend-item"><div class="legend-free"></div> Free</div>
+                <div class="legend-item"><div class="legend-path"></div> Path</div>
+                <div class="legend-item"><div class="legend-robot"></div> Robot</div>
+            </div>
+        </div>
+        <canvas id="mapCanvas"></canvas>
     </div>
-
-    <div class="lg:col-span-3 bg-gray-900 border border-gray-800 rounded-xl relative shadow-inner overflow-hidden">
-        <div class="absolute top-3 left-3 z-10 bg-gray-950/80 border border-gray-800 px-3 py-1 rounded-md text-xs text-gray-300">
-            2D Occupancy Map &nbsp;|&nbsp;
-            <span style="color:#e2e8f0">■</span> wall &nbsp;
-            <span style="color:#1e3a5f">■</span> free &nbsp;
-            <span style="color:#22d3ee">─</span> path &nbsp;
-            <span style="color:#22d3ee">●</span> robot
-        </div>
-        <canvas id="mapCanvas" style="width:100%;height:100%;display:block;"></canvas>
-    </div>
-
 </main>
 
 <script>
@@ -111,28 +337,27 @@ window._pathHistory = [];
 let mapUpdateCount  = 0;
 const PATH_MIN_DIST = 0.05;
 
-// ── ROS connection ─────────────────────────────────────────────────────────
+// ── ROS ───────────────────────────────────────────────────────────────────
 const ros = new ROSLIB.Ros({ url: 'ws://localhost:9090' });
 const statusEl = document.getElementById('status');
 
 ros.on('connection', () => {
     statusEl.innerText = 'CONNECTED';
-    statusEl.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-green-950 text-green-400 border border-green-800';
+    statusEl.className = 'connected';
     subscribeTopics();
 });
 ros.on('error', () => {
     statusEl.innerText = 'ERROR';
-    statusEl.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-amber-950 text-amber-400 border border-amber-800';
+    statusEl.className = 'error';
 });
 ros.on('close', () => {
     statusEl.innerText = 'DISCONNECTED';
-    statusEl.className = 'px-3 py-1 rounded-full text-xs font-semibold bg-red-950 text-red-400 border border-red-800';
+    statusEl.className = 'disconnected';
 });
 
-// ── Subscriptions ──────────────────────────────────────────────────────────
+// ── Subscriptions ─────────────────────────────────────────────────────────
 function subscribeTopics() {
 
-    // /odom
     new ROSLIB.Topic({ ros, name: '/odom', messageType: 'nav_msgs/msg/Odometry' })
     .subscribe(msg => {
         const x      = msg.pose.pose.position.x;
@@ -150,8 +375,7 @@ function subscribeTopics() {
             path.push({ x, y });
         } else {
             const last = path[path.length - 1];
-            const dx = x - last.x;
-            const dy = y - last.y;
+            const dx = x - last.x, dy = y - last.y;
             if (Math.sqrt(dx*dx + dy*dy) >= PATH_MIN_DIST) {
                 path.push({ x, y });
                 document.getElementById('path-points').innerText = path.length;
@@ -167,7 +391,6 @@ function subscribeTopics() {
         if (window._lastMap) drawMap(window._lastMap);
     });
 
-    // /sensor/*
     [
         { topic: '/sensor/front', el: 'sensor-front' },
         { topic: '/sensor/left',  el: 'sensor-left'  },
@@ -179,7 +402,6 @@ function subscribeTopics() {
         });
     });
 
-    // /map — retry every 3s until first message received
     function subscribeMap() {
         const mapTopic = new ROSLIB.Topic({
             ros, name: '/map', messageType: 'nav_msgs/msg/OccupancyGrid'
@@ -187,8 +409,7 @@ function subscribeTopics() {
         mapTopic.subscribe(msg => {
             mapUpdateCount++;
             document.getElementById('map-updates').innerText = mapUpdateCount;
-            const mapped = msg.data.filter(v => v !== -1).length;
-            document.getElementById('map-cells').innerText = mapped;
+            document.getElementById('map-cells').innerText = msg.data.filter(v => v !== -1).length;
             window._lastMap = msg;
             drawMap(msg);
         });
@@ -196,22 +417,17 @@ function subscribeTopics() {
     }
 
     let mapTopic = subscribeMap();
-    const mapRetry = setInterval(() => {
-        if (window._lastMap) {
-            clearInterval(mapRetry);
-            return;
-        }
-        // Unsubscribe and resubscribe to force rosbridge to push data
+    const retry = setInterval(() => {
+        if (window._lastMap) { clearInterval(retry); return; }
         mapTopic.unsubscribe();
         mapTopic = subscribeMap();
     }, 3000);
 }
 
-// ── 2D Map Renderer ────────────────────────────────────────────────────────
+// ── Map renderer ──────────────────────────────────────────────────────────
 function drawMap(msg) {
-    const canvas = document.getElementById('mapCanvas');
-    const ctx    = canvas.getContext('2d');
-
+    const canvas   = document.getElementById('mapCanvas');
+    const ctx      = canvas.getContext('2d');
     const displayW = canvas.clientWidth;
     const displayH = canvas.clientHeight;
     if (canvas.width !== displayW || canvas.height !== displayH) {
@@ -225,15 +441,13 @@ function drawMap(msg) {
     const ox  = msg.info.origin.position.x;
     const oy  = msg.info.origin.position.y;
 
-    // Auto-fit bounding box
+    // Bounding box of known cells
     let minX = W, maxX = 0, minY = H, maxY = 0;
     for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
             if (msg.data[y * W + x] !== -1) {
-                if (x < minX) minX = x;
-                if (x > maxX) maxX = x;
-                if (y < minY) minY = y;
-                if (y > maxY) maxY = y;
+                if (x < minX) minX = x; if (x > maxX) maxX = x;
+                if (y < minY) minY = y; if (y > maxY) maxY = y;
             }
         }
     }
@@ -242,17 +456,13 @@ function drawMap(msg) {
     allPoints.forEach(p => {
         const cx = Math.floor((p.x - ox) / res);
         const cy = Math.floor((p.y - oy) / res);
-        if (cx < minX) minX = cx;
-        if (cx > maxX) maxX = cx;
-        if (cy < minY) minY = cy;
-        if (cy > maxY) maxY = cy;
+        if (cx < minX) minX = cx; if (cx > maxX) maxX = cx;
+        if (cy < minY) minY = cy; if (cy > maxY) maxY = cy;
     });
 
-    const PAD = 10;
-    minX = Math.max(0, minX - PAD);
-    minY = Math.max(0, minY - PAD);
-    maxX = Math.min(W - 1, maxX + PAD);
-    maxY = Math.min(H - 1, maxY + PAD);
+    const PAD = 12;
+    minX = Math.max(0, minX - PAD); minY = Math.max(0, minY - PAD);
+    maxX = Math.min(W-1, maxX + PAD); maxY = Math.min(H-1, maxY + PAD);
 
     const spanX   = maxX - minX + 1;
     const spanY   = maxY - minY + 1;
@@ -265,11 +475,22 @@ function drawMap(msg) {
         py: offsetY + (maxY - Math.floor((wy - oy) / res)) * scale
     });
 
-    // Background
-    ctx.fillStyle = '#0f172a';
+    // Background — white
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, displayW, displayH);
 
-    // Occupancy cells
+    // Draw subtle grid
+    ctx.strokeStyle = '#f0f0f0';
+    ctx.lineWidth = 0.5;
+    const gridStep = Math.max(1, Math.round(10 / scale)) * scale;
+    for (let x = offsetX % gridStep; x < displayW; x += gridStep) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, displayH); ctx.stroke();
+    }
+    for (let y = offsetY % gridStep; y < displayH; y += gridStep) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(displayW, y); ctx.stroke();
+    }
+
+    // Draw cells
     const cellPx = Math.max(1, Math.ceil(scale));
     for (let y = minY; y <= maxY; y++) {
         for (let x = minX; x <= maxX; x++) {
@@ -277,12 +498,12 @@ function drawMap(msg) {
             if (val === -1) continue;
             const px = offsetX + (x - minX) * scale;
             const py = offsetY + (maxY - y) * scale;
-            ctx.fillStyle = val >= 50 ? '#e2e8f0' : '#1e3a5f';
+            ctx.fillStyle = val >= 50 ? '#1a1a1a' : '#f0f4ff';
             ctx.fillRect(px, py, cellPx, cellPx);
         }
     }
 
-    // Path trail
+    // Path trail — blue
     const path = window._pathHistory;
     if (path.length > 1) {
         ctx.beginPath();
@@ -292,22 +513,23 @@ function drawMap(msg) {
             const pt = toCanvas(path[i].x, path[i].y);
             ctx.lineTo(pt.px, pt.py);
         }
-        ctx.strokeStyle = '#22d3ee';
+        ctx.strokeStyle = '#2563eb';
         ctx.lineWidth   = 2;
         ctx.lineJoin    = 'round';
         ctx.lineCap     = 'round';
         ctx.stroke();
     }
 
-    // Robot dot
+    // Robot dot — red
     const robot = toCanvas(window._robotX, window._robotY);
     const dotR  = Math.max(5, scale * 1.5);
+
     ctx.beginPath();
     ctx.arc(robot.px, robot.py, dotR, 0, Math.PI * 2);
-    ctx.fillStyle = '#22d3ee';
+    ctx.fillStyle = '#ef4444';
     ctx.fill();
 
-    // Heading arrow
+    // Heading arrow — red
     const arrowLen = dotR * 3;
     ctx.beginPath();
     ctx.moveTo(robot.px, robot.py);
@@ -315,32 +537,27 @@ function drawMap(msg) {
         robot.px + arrowLen * Math.cos(window._robotYaw),
         robot.py - arrowLen * Math.sin(window._robotYaw)
     );
-    ctx.strokeStyle = '#22d3ee';
+    ctx.strokeStyle = '#ef4444';
     ctx.lineWidth   = 2;
     ctx.stroke();
 }
 
-// ── Controls ───────────────────────────────────────────────────────────────
-function resetView() {
-    if (window._lastMap) drawMap(window._lastMap);
-}
+function resetView() { if (window._lastMap) drawMap(window._lastMap); }
 
 function clearAll() {
     window._pathHistory = [];
     window._lastMap     = null;
     mapUpdateCount      = 0;
-    document.getElementById('map-updates').innerText = '0';
-    document.getElementById('map-cells').innerText   = '0';
-    document.getElementById('path-points').innerText = '0';
+    document.getElementById('map-updates').innerText  = '0';
+    document.getElementById('map-cells').innerText    = '0';
+    document.getElementById('path-points').innerText  = '0';
     const canvas = document.getElementById('mapCanvas');
     const ctx    = canvas.getContext('2d');
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
-window.addEventListener('resize', () => {
-    if (window._lastMap) drawMap(window._lastMap);
-});
+window.addEventListener('resize', () => { if (window._lastMap) drawMap(window._lastMap); });
 </script>
 </body>
 </html>
